@@ -4,7 +4,8 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import process from "node:process";
 
-const port = Number(process.env.WS_PORT || 8090);
+// Use PORT for Render.com compatibility, fallback to WS_PORT or 8090
+const port = Number(process.env.PORT || process.env.WS_PORT || 8090);
 
 const wss = new WebSocketServer({ port });
 
