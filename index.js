@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
+import { createServer } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -7,7 +8,20 @@ import process from "node:process";
 // Use PORT for Render.com compatibility, fallback to WS_PORT or 8090
 const port = Number(process.env.PORT || process.env.WS_PORT || 8090);
 
-const wss = new WebSocketServer({ port });
+// Create HTTP server (required for Render)
+const server = createServer((req, res) => {
+  // Simple HTTP endpoint for health checks
+  if (req.url === "/" || req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("WebSocket server is running");
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+// Attach WebSocket server to HTTP server
+const wss = new WebSocketServer({ server });
 
 function heartbeat() {
   this.isAlive = true;
@@ -446,4 +460,7 @@ wss.on("close", () => {
   clearInterval(interval);
 });
 
-console.log(`WebSocket server listening at :${port}`);
+// Start the HTTP server (which serves WebSocket connections)
+server.listen(port, () => {
+  console.log(`WebSocket server listening on port ${port}`);
+});
