@@ -470,12 +470,18 @@ wss.on("connection", (ws, req) => {
     const id = socketToClientId.get(ws);
     if (id && clientIdToSocket.get(id) === ws) {
       clientIdToSocket.delete(id);
-      // Delete client from database on disconnect
+      // Don't delete client from database on disconnect - keep them visible in panel
+      // This allows admins to see clients even if they disconnected
       try {
-        deleteClient.run(id);
-        console.log(`Client ${id} removed from database (disconnected)`);
+        const now = Date.now();
+        updateClientPage.run("(disconnected)", now, id);
+        const client = getClientById.get(id);
+        broadcastToDashboards({
+          type: "client_updated",
+          client: clientToJSON(client),
+        });
       } catch (err) {
-        console.error("Error deleting client:", err);
+        console.error("Error updating client on disconnect:", err);
       }
       broadcastToDashboards({ type: "client_disconnected", clientId: id });
     }
